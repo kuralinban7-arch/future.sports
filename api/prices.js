@@ -1,0 +1,1 @@
+window.FS_PRICES = {};

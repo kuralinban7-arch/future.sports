@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shop Sticks — Future Sports</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="brand/favicon.png">
+  <link rel="apple-touch-icon" href="brand/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/style.css?v=202611262010">
+</head>
+<body>
+  <div id="header"></div>
+
+  <main>
+    <section class="page-head">
+      <div class="container">
+        <div class="crumbs"><a href="index.html">Home</a> / <span id="crumb">Shop</span></div>
+        <h1 class="display" id="title">All <em>Sticks</em></h1>
+        <p class="muted" id="subtitle" style="max-width:56ch;margin-top:12px"></p>
+      </div>
+    </section>
+
+    <section class="container shop-layout">
+      <aside class="cat-side" aria-label="Categories">
+        <h5>Categories</h5>
+        <nav id="catNav"></nav>
+      </aside>
+      <div class="shop-main">
+        <div class="sub-slots" id="subSlots" hidden></div>
+        <div class="brand-row" id="brandRow" role="group" aria-label="Brands" hidden></div>
+        <div class="toolbar">
+          <div class="chips" id="seriesChips"></div>
+          <div class="chips" id="carbonChips"></div>
+          <select class="select" id="sort" aria-label="Sort products">
+            <option value="featured">Sort: Featured</option>
+            <option value="carbon-asc">Carbon: Low to High</option>
+            <option value="carbon-desc">Carbon: High to Low</option>
+            <option value="price-asc">Price: Low to High</option>
+            <option value="price-desc">Price: High to Low</option>
+          </select>
+        </div>
+        <p class="result-count" id="count"></p>
+        <div class="product-grid" id="grid" style="margin:18px 0 100px"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="footer"></div>
+
+  <script src="api/prices.js"></script>
+  <script src="js/products.js?v=202611262010"></script>
+  <script src="js/store.js?v=202611262010"></script>
+  <script src="js/fx.js?v=202611262010"></script>
+  <script>
+    const STICKS = 'composite-hockey-sticks';
+    const seriesParam = Object.keys(SERIES).includes(qs('series')) ? qs('series') : 'All';
+    const LEVEL_KEYS = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'Advanced', professional: 'Professional' };
+    const levelParam = LEVEL_KEYS[qs('level')] || 'All';
+    const state = {
+      cat: getCategory(qs('cat')) ? qs('cat') : (levelParam !== 'All' ? STICKS : 'all'),
+      sub: 'all',                       // slot inside a main slot (Sports Wear)
+      brand: 'All',                     // brand inside a slot shown brand by brand (T-Shirts)
+      series: seriesParam,
+      carbon: levelParam,
+      sort: 'featured',
+      q: (qs('q') || '').trim(),
+    };
+    if (getSub(state.cat, qs('sub'))) state.sub = qs('sub');
+    if (state.sub !== 'all' && getSub(state.cat, state.sub).byBrand && subBrands(state.cat, state.sub).includes(qs('brand'))) state.brand = qs('brand');
+    renderShell(seriesParam !== 'All' ? seriesParam.toLowerCase() : (state.cat === 'all' ? 'shop' : 'cat'));
+
+    // player levels (same ranges as the home page)
+    const CARBON = {
+      All: () => true,
+      Beginner: p => p.carbon >= 10 && p.carbon <= 30,
+      Intermediate: p => p.carbon >= 40 && p.carbon <= 60,
+      Advanced: p => p.carbon >= 70 && p.carbon <= 80,
+      Professional: p => p.carbon >= 90,
+    };
+    const LEVEL_RANGE = { Beginner: '10–30%', Intermediate: '40–60%', Advanced: '70–80%', Professional: '90–100%' };
+
+    function chips(el, options, key) {
+      el.innerHTML = options.map(o => `<button class="chip ${state[key] === o ? 'active' : ''}" data-v="${o}">${o === 'All' && key === 'carbon' ? 'Any level' : o === 'All' ? 'All series' : key === 'series' ? seriesName(o) : o}${key === 'carbon' && LEVEL_RANGE[o] ? ` <small>${LEVEL_RANGE[o]}</small>` : ''}</button>`).join('');
+      el.querySelectorAll('.chip').forEach(b => b.onclick = () => { state[key] = b.dataset.v; render(); });
+    }
+
+    function drawCatNav() {
+      const item = (id, name, n) => `<a href="#" data-cat="${id}" class="${state.cat === id && state.sub === 'all' ? 'active' : ''} ${n ? '' : 'empty'}"><span>${name}</span><small>${n || 'Soon'}</small></a>`;
+      document.getElementById('catNav').innerHTML =
+        item('all', 'All Products', PRODUCTS.length) +
+        [...CATEGORIES].sort((a, b) => !!b.main - !!a.main).map(c => item(c.id, c.name, categoryCount(c.id)) + (c.subs ? `<div class="cat-subs">${c.subs.map(s => {
+          const n = subCount(c.id, s.id);
+          return `<a href="#" data-cat="${c.id}" data-sub="${s.id}" class="${state.cat === c.id && state.sub === s.id ? 'active' : ''} ${n ? '' : 'empty'}"><span>${s.name}</span><small>${n || 'Soon'}</small></a>`;
+        }).join('')}</div>` : '')).join('');
+      document.querySelectorAll('#catNav a').forEach(a => a.onclick = e => {
+        e.preventDefault();
+        state.cat = a.dataset.cat; state.sub = a.dataset.sub || 'all'; state.brand = 'All'; state.series = 'All'; state.carbon = 'All'; state.q = '';
+        render();
+        if (innerWidth < 960) a.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+      });
+    }
+
+    /* the slots inside a main slot, shown as tiles above its products */
+    const SUB_ICON = {
+      't-shirts': '<svg viewBox="0 0 24 24"><path d="M8.5 3.5 4.5 5 2 9.5l3.5 1.8v9.2h13v-9.2L22 9.5 19.5 5l-4-1.5a3.6 3.6 0 0 1-7 0Z"/></svg>',
+      tracks: '<svg viewBox="0 0 24 24"><path d="M7 3h10l1.5 18H14l-2-11-2 11H5.5L7 3ZM6.8 6h10.4"/></svg>',
+    };
+    function drawSubs(cat) {
+      const el = document.getElementById('subSlots'); el.hidden = !(cat && cat.subs) || !!state.q; if (el.hidden) { el.innerHTML = ''; return; }
+      const tile = (id, name, n, pic) => `<button class="sub-slot ${state.sub === id ? 'active' : ''}" data-sub="${id}" aria-pressed="${state.sub === id}"><span><b>${name}</b><small>${n ? `${n} product${n === 1 ? '' : 's'}` : 'Coming soon'}</small></span><i>${pic}</i></button>`;
+      el.innerHTML = tile('all', `All ${cat.name}`, categoryCount(cat.id), ICON.bag) + cat.subs.map(s => {
+        const p = PRODUCTS.find(x => x.category === cat.id && x.sub === s.id);
+        return tile(s.id, s.name, subCount(cat.id, s.id), p ? cutImg(p) : SUB_ICON[s.id] || ICON.bag);
+      }).join('');
+      el.querySelectorAll('button').forEach(b => b.onclick = () => { state.sub = b.dataset.sub; state.brand = 'All'; render(); document.querySelector('#subSlots .active').focus({ preventScroll: true }); });
+    }
+
+    /* brands inside a slot shown brand by brand */
+    const inBrand = (p, b) => (p.brand || 'Other') === b;
+    function drawBrands(cat, sub) {
+      const el = document.getElementById('brandRow'), names = sub && sub.byBrand && !state.q ? subBrands(cat.id, sub.id) : [];
+      el.hidden = !names.length; if (el.hidden) { el.innerHTML = ''; return; }
+      const of = b => PRODUCTS.filter(p => p.category === cat.id && p.sub === sub.id && (b === 'All' || inBrand(p, b))).length;
+      el.innerHTML = `<h6>Brands</h6>` + ['All', ...names].map(b => `<button class="chip ${state.brand === b ? 'active' : ''}" data-b="${b}" aria-pressed="${state.brand === b}">${b === 'All' ? 'All brands' : b} <small>${of(b)}</small></button>`).join('');
+      el.querySelectorAll('button').forEach(x => x.onclick = () => { state.brand = x.dataset.b; render(); document.querySelector('#brandRow .active').focus({ preventScroll: true }); });
+    }
+
+    function render() {
+      drawCatNav();
+      const cat = getCategory(state.cat), sub = getSub(state.cat, state.sub);
+      drawSubs(cat); drawBrands(cat, sub);
+      const brand = sub && sub.byBrand && state.brand !== 'All' ? state.brand : '';
+      const isSticks = state.cat === STICKS;
+      const series = SERIES[state.series];
+
+      // stick-only filters
+      const seriesEl = document.getElementById('seriesChips'), carbonEl = document.getElementById('carbonChips');
+      const showSeries = isSticks || state.series !== 'All';
+      seriesEl.hidden = !showSeries; carbonEl.hidden = !isSticks;
+      if (showSeries) chips(seriesEl, ['All', ...Object.keys(SERIES)], 'series');
+      if (isSticks) chips(carbonEl, Object.keys(CARBON), 'carbon');
+
+      const words = state.q.toLowerCase().split(/\s+/).filter(Boolean);
+      const hay = p => [p.name, p.series, p.series ? seriesName(p.series) : '', p.tagline, slotLabel(p), p.brand || '', p.carbon ? p.carbon + '%' : '', ...(p.variants || []).map(v => v.name)].join(' ').toLowerCase();
+      let list = PRODUCTS.filter(p =>
+        words.every(w => hay(p).includes(w)) &&
+        (state.cat === 'all' || p.category === state.cat) &&
+        (!sub || p.sub === sub.id) && (!brand || inBrand(p, brand)) &&
+        (state.series === 'All' || p.series === state.series) &&
+        (!isSticks || CARBON[state.carbon](p)));
+      const [field, dir] = state.sort.split('-');
+      if (field !== 'featured') list = [...list].sort((a, b) => ((a[field] ?? 0) - (b[field] ?? 0)) * (dir === 'asc' ? 1 : -1));
+
+      // heading
+      let title, crumb, note = '';
+      if (state.q) { title = `Results for <em>“${state.q.replace(/[<>&"]/g, '')}”</em>`; crumb = 'Search'; }
+      else if (series && (isSticks || state.cat === 'all')) { title = series.label ? `${series.brand} <em>${series.label}</em>` : series.brand; crumb = series.title; note = series.blurb; }
+      else if (brand) { title = `${brand} <em>${sub.name}</em>`; crumb = `${cat.name} / ${sub.name} / ${brand}`; }
+      else if (sub) { title = `${cat.name} <em>${sub.name}</em>`; crumb = `${cat.name} / ${sub.name}`; }
+      else if (cat) { title = cat.name.replace(/(\S+)$/, '<em>$1</em>'); crumb = cat.name; note = isSticks ? 'Every SNS Prism, SNS Blade, Alfa, Fenta, Malik, Flash, Marex, Vijayanti, Deep, Rysum and STK composite stick.' : ''; }
+      else { title = 'All <em>Products</em>'; crumb = 'Shop'; note = 'Browse every category at Future Sports.'; }
+      document.getElementById('title').innerHTML = title;
+      document.getElementById('crumb').textContent = crumb;
+      document.getElementById('subtitle').textContent = note;
+      document.title = crumb.replace(/ \/ /g, ' ') + ' — Future Sports';
+
+      const empty = cat && !(sub ? subCount(cat.id, sub.id) : categoryCount(cat.id));
+      document.querySelector('.toolbar').hidden = empty;
+      document.getElementById('count').textContent = empty ? '' : `${list.length} product${list.length === 1 ? '' : 's'}`;
+      document.getElementById('grid').innerHTML = empty
+        ? `<div class="cat-empty" style="grid-column:1/-1">
+             <span class="kicker"><i></i>Coming soon</span>
+             <h3 class="display">${sub ? sub.name : cat.name}</h3>
+             <p>We're stocking ${sub ? sub.name : 'this category'} now. Check back soon.</p>
+             ${sub ? `<a href="shop.html?cat=${cat.id}" class="btn-red">See all ${cat.name} <b>→</b></a>` : `<a href="shop.html?cat=${STICKS}" class="btn-red">Shop Composite Sticks <b>→</b></a>`}
+           </div>`
+        : list.length && sub && sub.byBrand && !state.q
+        ? subBrands(cat.id, sub.id).filter(b => list.some(p => inBrand(p, b))).map(b => {
+            const own = list.filter(p => inBrand(p, b));
+            return `<h2 class="brand-head"><span>${b}</span><small>${own.length} product${own.length === 1 ? '' : 's'}</small></h2>` + own.map(productCard).join('');
+          }).join('')
+        : list.length ? list.map(productCard).join('')
+        : `<div class="empty" style="grid-column:1/-1">No products match${state.q ? ` “${state.q.replace(/[<>&"]/g, '')}”` : ' these filters'}. <a href="shop.html" class="link-line">See all equipment</a></div>`;
+
+      const url = new URL(location);
+      url.search = '';
+      if (state.q) url.searchParams.set('q', state.q);
+      if (state.cat !== 'all') url.searchParams.set('cat', state.cat);
+      if (sub) url.searchParams.set('sub', sub.id);
+      if (brand) url.searchParams.set('brand', brand);
+      if (state.series !== 'All') url.searchParams.set('series', state.series);
+      const lv = Object.keys(LEVEL_KEYS).find(k => LEVEL_KEYS[k] === state.carbon);
+      if (isSticks && lv) url.searchParams.set('level', lv);
+      history.replaceState(null, '', url);
+      initReveal();
+    }
+
+    document.getElementById('sort').onchange = e => { state.sort = e.target.value; render(); };
+    render();
+  </script>
+</body>
+</html>
