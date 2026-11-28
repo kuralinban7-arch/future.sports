@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="icon" type="image/png" href="brand/favicon.png">
   <link rel="apple-touch-icon" href="brand/apple-touch-icon.png">
-  <link rel="stylesheet" href="css/style.css?v=202611281820">
+  <link rel="stylesheet" href="css/style.css?v=202611281920">
 </head>
 <body>
   <div id="header"></div>
@@ -73,9 +73,10 @@
   <div id="footer"></div>
 
   <script src="api/prices.js"></script>
-  <script src="js/products.js?v=202611281820"></script>
-  <script src="js/store.js?v=202611281820"></script>
-  <script src="js/fx.js?v=202611281820"></script>
+  <script src="js/products.js?v=202611281920"></script>
+  <script src="js/store.js?v=202611281920"></script>
+  <script src="js/fx.js?v=202611281920"></script>
+  <script src="js/qr.js?v=202611281920"></script>
   <script>
     renderShell('');
 
@@ -106,20 +107,11 @@
           <div><h4>${esc(l.name)}</h4><div class="meta">${esc([l.meta, 'Qty ' + l.qty].filter(Boolean).join(' · '))}</div></div>
           <div class="right"><span class="price">${money(l.total)}</span></div>
         </div>`).join('');
-      const qr = PAY.qr
-        ? `<img src="${esc(PAY.qr)}" alt="Future Sports GPay QR code" width="240" height="240">`
-        : `<div class="qr-missing">GPay QR code<br>coming soon</div>`;
       const pay = o.cod
         ? `<li class="pay-step"><span class="num">2</span><div>
              <h3>Pay ${money(o.total)} on delivery</h3>
              <p>Keep ${money(o.total)} ready in cash when your order arrives. We will confirm the order on WhatsApp.</p></div></li>`
-        : `<li class="pay-step"><span class="num">2</span><div>
-             <h3>Pay ${money(o.total)} with GPay</h3>
-             <p>Scan this QR in GPay, PhonePe, Paytm or any UPI app and pay <b>${money(o.total)}</b>. Please add <b style="white-space:nowrap">${esc(o.no)}</b> in the payment note.</p>
-             <figure class="qr">${qr}</figure>
-             ${PAY.upiId ? `<div class="upi"><span>UPI ID</span><b id="upiId">${esc(PAY.upiId)}</b><button type="button" id="copyUpi">Copy</button></div>` : ''}
-             ${PAY.qr ? `<p class="hint">Shopping on your phone? <a href="${esc(PAY.qrSave || PAY.qr)}" download="future-sports-gpay-qr">Save the QR</a>, then open GPay → Scan → choose the picture from your gallery.</p>` : ''}
-           </div></li>
+        : `<li class="pay-step"><span class="num">2</span><div id="payBox"></div></li>
            <li class="pay-step"><span class="num">3</span><div>
              <h3>Send the payment proof</h3>
              <p class="proof">${esc(PAY.proofNote || '')}</p>
@@ -142,13 +134,61 @@
             <div class="sum-total"><span>Total</span><span class="price">${money(o.total)}</span></div></div>
           <a href="shop.html" class="btn">Continue Shopping</a>
         </div>`;
+      if (!o.cod) payBox(o, false);
+      window.scrollTo({ top: 0 });
+    }
+
+    /* ── step 2: the QR. Normally a QR made for this order, so the UPI app fills in the amount and the
+       order number (it shows in the shop's GPay history as the payment note). If the customer's app
+       refuses it, "Show our shop QR" swaps in the shop's own GPay QR and asks them to type both. ── */
+    const upiLink = o => 'upi://pay?' + [['pa', PAY.upiId], ['pn', PAY.upiName || 'FUTURE SPORTS'], ['am', Number(o.total).toFixed(2)], ['cu', 'INR'], ['tn', o.no]]
+      .map(([k, v]) => k + '=' + encodeURIComponent(v).replace(/%40/g, '@')).join('&');
+
+    // the QR as a picture to keep in the phone's gallery: shop name, QR, amount, order number, UPI ID
+    function qrCard(q, o, done) {
+      const W = 720, px = Math.floor(540 / q.size), side = px * q.size, x0 = Math.floor((W - side) / 2), y0 = 96 + 4 * px;
+      const c = document.createElement('canvas'); c.width = W; c.height = y0 + side + 4 * px + 210;
+      const g = c.getContext('2d'), font = 'system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+      const text = (s, size, weight, color, y) => { g.fillStyle = color; g.font = `${weight} ${size}px ${font}`; g.fillText(s, W / 2, y); };
+      g.fillStyle = '#fff'; g.fillRect(0, 0, W, c.height); g.textAlign = 'center';
+      text('FUTURE SPORTS', 40, 700, '#111', 74);
+      g.fillStyle = '#000';
+      for (let y = 0; y < q.size; y++) for (let x = 0; x < q.size; x++) if (q.dark(x, y)) g.fillRect(x0 + x * px, y0 + y * px, px, px);
+      let y = y0 + side + 4 * px + 40;
+      text('Pay ' + money(o.total), 46, 700, '#111', y);
+      text('Order ' + o.no, 30, 500, '#333', y += 52);
+      text('UPI ID: ' + PAY.upiId, 24, 400, '#555', y += 46);
+      text('Scan with GPay, PhonePe, Paytm or any UPI app', 22, 400, '#777', y += 40);
+      if (c.toBlob) c.toBlob(b => done(b ? URL.createObjectURL(b) : c.toDataURL('image/png')), 'image/png');
+      else done(c.toDataURL('image/png'));
+    }
+
+    function payBox(o, shopQr) {
+      const box = document.getElementById('payBox');
+      const q = !shopQr && PAY.upiId && window.QR ? QR.make(upiLink(o)) : null;
+      const total = money(o.total), no = `<b style="white-space:nowrap">${esc(o.no)}</b>`;
+      const pic = q ? `<img src="${QR.svg(q, 2)}" alt="UPI QR code to pay ${esc(total)} for order ${esc(o.no)}" width="240" height="240">`
+        : PAY.qr ? `<img src="${esc(PAY.qr)}" alt="Future Sports GPay QR code" width="240" height="240">`
+        : `<div class="qr-missing">GPay QR code<br>coming soon</div>`;
+      const canSwap = PAY.qr && PAY.upiId && window.QR;
+      box.innerHTML = `
+        <h3>Pay ${total} with GPay</h3>
+        <p>${q ? `Scan this QR in GPay, PhonePe, Paytm or any UPI app. The amount <b>${total}</b> and your order number ${no} are already filled in, so just check and pay.`
+               : `Scan this QR in GPay, PhonePe, Paytm or any UPI app and pay <b>${total}</b>. Please add ${no} in the payment note.`}</p>
+        <figure class="qr">${pic}</figure>
+        ${PAY.upiId ? `<div class="upi"><span>UPI ID</span><b id="upiId">${esc(PAY.upiId)}</b><button type="button" id="copyUpi">Copy</button></div>` : ''}
+        ${q || PAY.qr ? `<p class="hint">Shopping on your phone? <a id="saveQr" ${q ? '' : `href="${esc(PAY.qrSave || PAY.qr)}"`} download="${q ? `future-sports-${esc(o.no)}.png` : 'future-sports-gpay-qr'}">Save the QR</a>, then open GPay → Scan → choose the picture from your gallery.</p>` : ''}
+        ${canSwap ? `<button type="button" class="qr-swap" id="qrSwap">${shopQr ? `Show the QR with ${total} filled in` : 'QR not working? Show our shop QR'}</button>` : ''}`;
+
+      if (q) qrCard(q, o, url => { const a = document.getElementById('saveQr'); if (a) a.href = url; });
+      const swap = document.getElementById('qrSwap');
+      if (swap) swap.onclick = () => payBox(o, !shopQr);
       const copy = document.getElementById('copyUpi');
       if (copy) copy.onclick = async () => {
         try { await navigator.clipboard.writeText(PAY.upiId); copy.textContent = 'Copied'; }
         catch { getSelection().selectAllChildren(document.getElementById('upiId')); copy.textContent = 'Press copy'; }
         setTimeout(() => copy.textContent = 'Copy', 2000);
       };
-      window.scrollTo({ top: 0 });
     }
 
     let placed = false;
