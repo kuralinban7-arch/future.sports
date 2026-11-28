@@ -212,7 +212,7 @@ function renderShell(active) {
 const CUT_EDGES = 'e=2';   // bump when the cut-outs are redone (e=2: edges cleaned with tools/defringe.py, 26 Nov 2026)
 function cutImg(p, cls = '') {
   const orig = productImages(p)[0];
-  if (p.photoCard) return `<img src="${orig}" alt="${p.name}" class="${cls} nocut" loading="lazy">`;      // no cut-out exists: the card shows the photo
+  if (p.photoCard || /^https?:/.test(orig)) return `<img src="${orig}" alt="${p.name}" class="${cls} nocut" loading="lazy">`;      // no cut-out exists: the card shows the photo
   const cut = orig.replace(/\.jpg(\?.*)?$/, (m, q) => `-cut.webp${q ? q + '&' : '?'}${CUT_EDGES}`);
   return `<img src="${cut}" alt="${p.name}" class="${cls}" loading="lazy" onerror="this.onerror=null;this.src='${orig}';this.classList.add('nocut')">`;
 }

@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="icon" type="image/png" href="brand/favicon.png">
   <link rel="apple-touch-icon" href="brand/apple-touch-icon.png">
-  <link rel="stylesheet" href="css/style.css?v=202611281920">
+  <link rel="stylesheet" href="css/style.css?v=202611282100">
 </head>
 <body>
   <div id="header"></div>
@@ -23,18 +23,18 @@
         <div class="form-block">
           <h3><span>01</span> Contact</h3>
           <div class="fields">
-            <div class="field full"><label for="name">Full name</label><input id="name" autocomplete="name" required><div class="err">Please enter your name</div></div>
+            <div class="field full"><label for="name">Full name</label><input id="name" autocomplete="name" maxlength="80" required><div class="err">Please enter your name</div></div>
             <div class="field"><label for="phone">Mobile number</label><input id="phone" type="tel" inputmode="numeric" autocomplete="tel" required pattern="[0-9+ ]{10,14}"><div class="err">Enter a valid 10-digit mobile number</div></div>
-            <div class="field"><label for="email">Email (optional)</label><input id="email" type="email" autocomplete="email"><div class="err">Enter a valid email</div></div>
+            <div class="field"><label for="email">Email (optional)</label><input id="email" type="email" autocomplete="email" maxlength="120"><div class="err">Enter a valid email</div></div>
           </div>
         </div>
 
         <div class="form-block">
           <h3><span>02</span> Delivery Address</h3>
           <div class="fields">
-            <div class="field full"><label for="addr1">House / flat, street</label><input id="addr1" autocomplete="address-line1" required><div class="err">Please enter your address</div></div>
-            <div class="field full"><label for="addr2">Area, landmark (optional)</label><input id="addr2" autocomplete="address-line2"></div>
-            <div class="field"><label for="city">City</label><input id="city" autocomplete="address-level2" required><div class="err">Please enter your city</div></div>
+            <div class="field full"><label for="addr1">House / flat, street</label><input id="addr1" autocomplete="address-line1" maxlength="200" required><div class="err">Please enter your address</div></div>
+            <div class="field full"><label for="addr2">Area, landmark (optional)</label><input id="addr2" autocomplete="address-line2" maxlength="200"></div>
+            <div class="field"><label for="city">City</label><input id="city" autocomplete="address-level2" maxlength="80" required><div class="err">Please enter your city</div></div>
             <div class="field"><label for="pin">PIN code</label><input id="pin" inputmode="numeric" autocomplete="postal-code" required pattern="[0-9]{6}" maxlength="6"><div class="err">Enter a 6-digit PIN code</div></div>
             <div class="field full"><label for="state">State</label>
               <select id="state" required><option value="">Select state</option></select>
@@ -73,11 +73,14 @@
   <div id="footer"></div>
 
   <script src="api/prices.js"></script>
-  <script src="js/products.js?v=202611281920"></script>
-  <script src="js/store.js?v=202611281920"></script>
-  <script src="js/fx.js?v=202611281920"></script>
-  <script src="js/qr.js?v=202611281920"></script>
+  <script src="js/products.js?v=202611282100"></script>
+  <script src="js/db.js?v=202611282100"></script>
+  <script src="js/live.js?v=202611282100" data-wait="always"></script>
+  <script src="js/store.js?v=202611282100"></script>
+  <script src="js/fx.js?v=202611282100"></script>
+  <script src="js/qr.js?v=202611282100"></script>
   <script>
+  onProducts(() => {
     renderShell('');
 
     const STATES = ['Andaman and Nicobar Islands','Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chandigarh','Chhattisgarh','Dadra and Nagar Haveli and Daman and Diu','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jammu and Kashmir','Jharkhand','Karnataka','Kerala','Ladakh','Lakshadweep','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Puducherry','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal'];
@@ -97,6 +100,17 @@
       return L.join('\n');
     }
     const proofText = o => `Hi Future Sports, I have paid ${money(o.total)} for order ${o.no}. Here is my payment screenshot:`;
+
+    /* the order also goes into the shop's database (orders list on the admin page). WhatsApp still carries
+       the whole order, so a failed save (no signal, database asleep) loses nothing. */
+    function saveOrder(o) {
+      if (typeof DB === 'undefined' || !DB.on) return;
+      DB.rest('orders', { method: 'POST', prefer: 'return=minimal', keepalive: true, body: {
+        no: o.no, pay: o.cod ? 'cod' : 'upi', name: o.name, phone: o.phone, email: o.email || null,
+        address: o.address, lines: o.lines.map(l => ({ id: l.id, name: l.name, meta: l.meta, qty: l.qty, total: l.total, img: l.img })),
+        sub: o.sub, ship: o.ship, cod_fee: o.codFee || 0, total: o.total,
+      } }).catch(() => {});
+    }
 
     /* ── after the order: send on WhatsApp, pay with the QR, send the proof ── */
     function showOrder(o) {
@@ -255,12 +269,14 @@
       };
       // open WhatsApp straight away (the tap on the button allows it); the page keeps a button in case it was blocked
       window.open(waLink(orderText(o)), '_blank', 'noopener');
+      saveOrder(o);
       try { localStorage.setItem(ORDER_KEY, JSON.stringify(o)); } catch {}
       history.replaceState(null, '', `checkout.html?order=${o.no}`);
       placed = true;
       Cart.clear();
       showOrder(o);
     };
+  });
   </script>
 </body>
 </html>

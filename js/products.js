@@ -1592,20 +1592,24 @@ PRODUCTS.push(
   }),
 );
 
-/* Sticks without a category are composite sticks (the Alfa Magnum is wooden) */
-PRODUCTS.forEach(p => { p.category = p.category || 'composite-hockey-sticks'; });
-
-/* ── prices and stock saved on the admin page (/admin, server/app.py) replace the ones written above ── */
-PRODUCTS.forEach(p => {
-  if (p.bulk) p.bulkSetup = p.bulk;
-  const all = window.FS_PRICES, s = all && Object.prototype.hasOwnProperty.call(all, p.id) ? all[p.id] : null;
-  if (s) {
-    if ('price' in s) { p.price = typeof s.price === 'number' ? s.price : null; if (p.price === null) p.tba = 'Update soon'; else p.priceConfirmed = true; }
-    if (typeof s.inStock === 'boolean') p.inStock = s.inStock;
-    if (p.bulk && typeof s.bulk === 'number') p.bulk = p.bulkSetup = { ...p.bulk, price: s.bulk };
-  }
-  if (p.bulk && !(typeof p.price === 'number' && p.bulk.price < p.price)) delete p.bulk;      // a bulk price must be a discount
-});
+/* Everything above is the built-in copy of the catalogue. The live list comes from the shop's database
+   (js/live.js replaces PRODUCTS with it and runs finishProducts again); this copy is used when the
+   database can't be reached. */
+function finishProducts() {
+  PRODUCTS.forEach(p => {
+    p.category = p.category || 'composite-hockey-sticks';      // sticks without a category are composite sticks (the Alfa Magnum is wooden)
+    if (p.bulk) p.bulkSetup = p.bulk;
+    // prices and stock from the old local price page (server/app.py → api/prices.js), if any were saved
+    const all = window.FS_PRICES, s = all && Object.prototype.hasOwnProperty.call(all, p.id) ? all[p.id] : null;
+    if (s) {
+      if ('price' in s) { p.price = typeof s.price === 'number' ? s.price : null; if (p.price === null) p.tba = 'Update soon'; else p.priceConfirmed = true; }
+      if (typeof s.inStock === 'boolean') p.inStock = s.inStock;
+      if (p.bulk && typeof s.bulk === 'number') p.bulk = p.bulkSetup = { ...p.bulk, price: s.bulk };
+    }
+    if (p.bulk && !(typeof p.price === 'number' && p.bulk.price < p.price)) delete p.bulk;      // a bulk price must be a discount
+  });
+}
+finishProducts();
 
 /* ── helpers ── */
 function getProduct(id) { return PRODUCTS.find(p => p.id === id); }

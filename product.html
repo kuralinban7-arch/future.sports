@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="icon" type="image/png" href="brand/favicon.png">
   <link rel="apple-touch-icon" href="brand/apple-touch-icon.png">
-  <link rel="stylesheet" href="css/style.css?v=202611281920">
+  <link rel="stylesheet" href="css/style.css?v=202611282100">
 </head>
 <body>
   <div id="header"></div>
@@ -68,11 +68,14 @@
   <div id="footer"></div>
 
   <script src="api/prices.js"></script>
-  <script src="js/products.js?v=202611281920"></script>
-  <script src="js/store.js?v=202611281920"></script>
-  <script src="js/fx.js?v=202611281920"></script>
-  <script src="js/inspect.js?v=202611281920"></script>
+  <script src="js/products.js?v=202611282100"></script>
+  <script src="js/db.js?v=202611282100"></script>
+  <script src="js/live.js?v=202611282100"></script>
+  <script src="js/store.js?v=202611282100"></script>
+  <script src="js/fx.js?v=202611282100"></script>
+  <script src="js/inspect.js?v=202611282100"></script>
   <script>
+  onProducts(() => {
     const p = getProduct(qs('id')) || PRODUCTS[0];
     const cat = getCategory(p.category);
     const sub = getSub(p.category, p.sub);                     // slot inside a main slot, e.g. Sports Wear › Shorts
@@ -289,6 +292,7 @@
     document.getElementById('relEyebrow').textContent = related.length ? `More ${p.series || cat.name}` : 'Composite Hockey Sticks';
     document.getElementById('related').innerHTML = fill.map(productCard).join('');
     initReveal();
+  });
   </script>
 </body>
 </html>

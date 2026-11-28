@@ -1,6 +1,7 @@
 /* ═══════════════════════════════════════════════════════════
    FUTURE SPORTS — home page sections
 ═══════════════════════════════════════════════════════════ */
+onProducts(() => {
 renderShell('home');
 
 const HERO = getProduct('blade-7');
@@ -105,3 +106,4 @@ mountFibre($('technology'), HERO);
 
 initReveal();
 initScramble();
+});
