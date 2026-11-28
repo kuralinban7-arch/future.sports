@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="icon" type="image/png" href="brand/favicon.png">
   <link rel="apple-touch-icon" href="brand/apple-touch-icon.png">
-  <link rel="stylesheet" href="css/style.css?v=202611262010">
+  <link rel="stylesheet" href="css/style.css?v=202611281820">
 </head>
 <body>
   <div id="header"></div>
@@ -25,7 +25,7 @@
           <div class="fields">
             <div class="field full"><label for="name">Full name</label><input id="name" autocomplete="name" required><div class="err">Please enter your name</div></div>
             <div class="field"><label for="phone">Mobile number</label><input id="phone" type="tel" inputmode="numeric" autocomplete="tel" required pattern="[0-9+ ]{10,14}"><div class="err">Enter a valid 10-digit mobile number</div></div>
-            <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="email" required><div class="err">Enter a valid email</div></div>
+            <div class="field"><label for="email">Email (optional)</label><input id="email" type="email" autocomplete="email"><div class="err">Enter a valid email</div></div>
           </div>
         </div>
 
@@ -45,15 +45,15 @@
         <div class="form-block">
           <h3><span>03</span> Payment</h3>
           <div class="radio-cards">
-            <label class="radio-card"><input type="radio" name="pay" value="online" checked>
-              <span class="grow"><strong>UPI / Card / Net Banking</strong><small>Pay securely online</small></span></label>
+            <label class="radio-card"><input type="radio" name="pay" value="upi" checked>
+              <span class="grow"><strong>GPay / UPI</strong><small>Scan our GPay QR after you send the order</small></span></label>
             <label class="radio-card"><input type="radio" name="pay" value="cod">
-              <span class="grow"><strong>Cash on Delivery</strong><small>Pay when your stick arrives · +<span id="codFee"></span></small></span></label>
+              <span class="grow"><strong>Cash on Delivery</strong><small>Pay when your order arrives · +<span id="codFee"></span></small></span></label>
           </div>
-          <p class="note">Demo store: online payment is not connected yet, so placing an order only shows a confirmation. No money is taken.</p>
+          <p class="note">Your order goes to Future Sports on WhatsApp. For GPay / UPI, you then scan our QR, pay, and send the payment screenshot on WhatsApp.</p>
         </div>
 
-        <button class="btn btn-accent btn-block" id="placeBtn" style="padding:18px">Place Order</button>
+        <button class="btn btn-accent btn-block btn-order" id="placeBtn" style="padding:18px">Send Order on WhatsApp</button>
       </form>
 
       <aside class="summary">
@@ -73,15 +73,93 @@
   <div id="footer"></div>
 
   <script src="api/prices.js"></script>
-  <script src="js/products.js?v=202611262010"></script>
-  <script src="js/store.js?v=202611262010"></script>
-  <script src="js/fx.js?v=202611262010"></script>
+  <script src="js/products.js?v=202611281820"></script>
+  <script src="js/store.js?v=202611281820"></script>
+  <script src="js/fx.js?v=202611281820"></script>
   <script>
     renderShell('');
 
     const STATES = ['Andaman and Nicobar Islands','Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chandigarh','Chhattisgarh','Dadra and Nagar Haveli and Daman and Diu','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jammu and Kashmir','Jharkhand','Karnataka','Kerala','Ladakh','Lakshadweep','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Puducherry','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal'];
-    document.getElementById('state').insertAdjacentHTML('beforeend', STATES.map(s => `<option>${s}</option>`).join(''));
-    document.getElementById('codFee').textContent = money(STORE.codFee);
+    const PAY = STORE.payment || {};
+    const ORDER_KEY = 'fs-last-order';            // the last order, so the payment steps survive a reload or a trip to WhatsApp
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const val = id => document.getElementById(id).value.replace(/\s+/g, ' ').trim();
+
+    /* ── the order as it is sent to the shop on WhatsApp ── */
+    function orderText(o) {
+      const L = ['Hi Future Sports, I would like to place this order.', '', `*Order ${o.no}*`];
+      o.lines.forEach((l, i) => L.push(`${i + 1}. ${l.name}`, `    ${[l.meta, 'Qty ' + l.qty, money(l.total)].filter(Boolean).join(' · ')}`));
+      L.push('', `Subtotal: ${money(o.sub)}`, `Shipping: ${o.ship ? money(o.ship) : 'Free'}`);
+      if (o.codFee) L.push(`Cash on delivery: ${money(o.codFee)}`);
+      L.push(`*Total: ${money(o.total)}*`, `Payment: ${o.cod ? 'Cash on delivery' : 'GPay / UPI'}`, '', '*Deliver to*', o.name, o.phone, ...o.address);
+      if (o.email) L.push(o.email);
+      return L.join('\n');
+    }
+    const proofText = o => `Hi Future Sports, I have paid ${money(o.total)} for order ${o.no}. Here is my payment screenshot:`;
+
+    /* ── after the order: send on WhatsApp, pay with the QR, send the proof ── */
+    function showOrder(o) {
+      const sendUrl = waLink(orderText(o)), proofUrl = waLink(proofText(o));
+      const lines = o.lines.map(l => `
+        <div class="cart-line">
+          <span class="thumb"><img src="${esc(l.img)}" alt=""></span>
+          <div><h4>${esc(l.name)}</h4><div class="meta">${esc([l.meta, 'Qty ' + l.qty].filter(Boolean).join(' · '))}</div></div>
+          <div class="right"><span class="price">${money(l.total)}</span></div>
+        </div>`).join('');
+      const qr = PAY.qr
+        ? `<img src="${esc(PAY.qr)}" alt="Future Sports GPay QR code" width="240" height="240">`
+        : `<div class="qr-missing">GPay QR code<br>coming soon</div>`;
+      const pay = o.cod
+        ? `<li class="pay-step"><span class="num">2</span><div>
+             <h3>Pay ${money(o.total)} on delivery</h3>
+             <p>Keep ${money(o.total)} ready in cash when your order arrives. We will confirm the order on WhatsApp.</p></div></li>`
+        : `<li class="pay-step"><span class="num">2</span><div>
+             <h3>Pay ${money(o.total)} with GPay</h3>
+             <p>Scan this QR in GPay, PhonePe, Paytm or any UPI app and pay <b>${money(o.total)}</b>. Please add <b style="white-space:nowrap">${esc(o.no)}</b> in the payment note.</p>
+             <figure class="qr">${qr}</figure>
+             ${PAY.upiId ? `<div class="upi"><span>UPI ID</span><b id="upiId">${esc(PAY.upiId)}</b><button type="button" id="copyUpi">Copy</button></div>` : ''}
+             ${PAY.qr ? `<p class="hint">Shopping on your phone? <a href="${esc(PAY.qrSave || PAY.qr)}" download="future-sports-gpay-qr">Save the QR</a>, then open GPay → Scan → choose the picture from your gallery.</p>` : ''}
+           </div></li>
+           <li class="pay-step"><span class="num">3</span><div>
+             <h3>Send the payment proof</h3>
+             <p class="proof">${esc(PAY.proofNote || '')}</p>
+             <a class="btn btn-wa" href="${proofUrl}" target="_blank" rel="noopener">${ICON.wa}<span>Send payment proof</span></a></div></li>`;
+
+      document.getElementById('main').innerHTML = `
+        <div class="success order-done">
+          <div class="tick">${ICON.check}</div>
+          <span class="eyebrow">Order ${esc(o.no)}</span>
+          <h1 class="display">Thank you, <em>${esc(o.first)}</em></h1>
+          <p>Your order for <b>${money(o.total)}</b> has been written into WhatsApp for Future Sports.</p>
+          <ol class="pay-steps">
+            <li class="pay-step"><span class="num">1</span><div>
+              <h3>Send the order on WhatsApp</h3>
+              <p>WhatsApp opens with your order typed in. Just tap <b>Send</b>. If it didn't open, tap the button.</p>
+              <a class="btn btn-wa" href="${sendUrl}" target="_blank" rel="noopener">${ICON.wa}<span>Send order on WhatsApp</span></a></div></li>
+            ${pay}
+          </ol>
+          <div class="summary order-lines">${lines}
+            <div class="sum-total"><span>Total</span><span class="price">${money(o.total)}</span></div></div>
+          <a href="shop.html" class="btn">Continue Shopping</a>
+        </div>`;
+      const copy = document.getElementById('copyUpi');
+      if (copy) copy.onclick = async () => {
+        try { await navigator.clipboard.writeText(PAY.upiId); copy.textContent = 'Copied'; }
+        catch { getSelection().selectAllChildren(document.getElementById('upiId')); copy.textContent = 'Press copy'; }
+        setTimeout(() => copy.textContent = 'Copy', 2000);
+      };
+      window.scrollTo({ top: 0 });
+    }
+
+    let placed = false;
+    const wanted = new URLSearchParams(location.search).get('order');
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(ORDER_KEY)); } catch {}
+    if (wanted && saved && saved.no === wanted) { placed = true; showOrder(saved); }
+    else {
+      document.getElementById('state').insertAdjacentHTML('beforeend', STATES.map(s => `<option>${s}</option>`).join(''));
+      document.getElementById('codFee').textContent = money(STORE.codFee);
+    }
 
     const payMethod = () => document.querySelector('input[name=pay]:checked').value;
 
@@ -102,12 +180,11 @@
       document.getElementById('codRow').hidden = !t.cod;
       document.getElementById('sumCod').textContent = money(t.cod);
       document.getElementById('sumTotal').textContent = money(t.total);
-      document.getElementById('placeBtn').textContent = `Place Order · ${money(t.total)}`;
+      document.getElementById('placeBtn').innerHTML = `${ICON.wa}<span>Send Order on WhatsApp · ${money(t.total)}</span>`;
     }
-    let placed = false;
     document.addEventListener('cart:change', () => !placed && document.getElementById('sumLines') && drawSummary());
     document.querySelectorAll('input[name=pay]').forEach(r => r.onchange = drawSummary);
-    drawSummary();
+    if (!placed) drawSummary();
 
     // validation
     const form = document.getElementById('form') || document.createElement('form');   // gone when the cart is empty
@@ -116,32 +193,33 @@
     form.onsubmit = e => {
       e.preventDefault();
       let first = null;
-      form.querySelectorAll('[required]').forEach(el => {
-        const ok = el.checkValidity() && el.value.trim() !== '';
+      form.querySelectorAll('[required], #email').forEach(el => {
+        const ok = el.checkValidity() && (el.value.trim() !== '' || !el.required);
         el.closest('.field').classList.toggle('invalid', !ok);
         if (!ok && !first) first = el;
       });
       if (first) { first.focus(); first.scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
 
       const t = totals();
-      const orderNo = 'SNS-' + Date.now().toString(36).toUpperCase().slice(-6);
-      const name = document.getElementById('name').value.trim().split(' ')[0];
-      const items = Cart.items.map(l => cartLineHTML(l, true)).join('');
-      const cod = payMethod() === 'cod';
+      const o = {
+        no: 'FS-' + (Date.now().toString(36).slice(-5) + Math.floor(Math.random() * 36).toString(36)).toUpperCase(),
+        at: new Date().toISOString(),
+        lines: Cart.items.map(l => {
+          const p = getProduct(l.id);
+          return { id: l.id, name: p.name, qty: l.qty, total: Cart.lineTotal(l), img: productImages(p, l.variant ?? 0)[0],
+                   meta: [p.variants ? (p.variants[l.variant ?? 0] || p.variants[0]).name : '', l.size === 'One Size' ? '' : l.size].filter(Boolean).join(' · ') };
+        }),
+        sub: t.sub, ship: t.ship, codFee: t.cod, total: t.total, cod: payMethod() === 'cod',
+        name: val('name'), first: val('name').split(' ')[0], phone: val('phone'), email: val('email'),
+        address: [val('addr1'), val('addr2'), `${val('city')} - ${val('pin')}`, val('state')].filter(Boolean),
+      };
+      // open WhatsApp straight away (the tap on the button allows it); the page keeps a button in case it was blocked
+      window.open(waLink(orderText(o)), '_blank', 'noopener');
+      try { localStorage.setItem(ORDER_KEY, JSON.stringify(o)); } catch {}
+      history.replaceState(null, '', `checkout.html?order=${o.no}`);
       placed = true;
       Cart.clear();
-      document.getElementById('main').innerHTML = `
-        <div class="success">
-          <div class="tick">${ICON.check}</div>
-          <span class="eyebrow">Order placed</span>
-          <h1 class="display">Thank you, <em>${name.replace(/[<>&"]/g, '')}</em></h1>
-          <div class="order-no">${orderNo}</div>
-          <p>We have received your order for ${money(t.total)}${cod ? ', payable on delivery' : ''}.</p>
-          <p class="note" style="margin:0">Demo store: this order was not sent anywhere and no payment was taken.</p>
-          <div class="summary" style="position:static;width:min(480px,100%);text-align:left">${items}</div>
-          <a href="shop.html" class="btn">Continue Shopping</a>
-        </div>`;
-      window.scrollTo({ top: 0 });
+      showOrder(o);
     };
   </script>
 </body>

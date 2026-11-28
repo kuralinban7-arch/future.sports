@@ -19,6 +19,15 @@ const STORE = {
   sizes: ['36.5"', '37.5"'],
   // Shown in the footer once filled in (leave '' to hide a line)
   contact: { email: '', phone: '+91 75989 43236', whatsapp: '+91 75989 43236', address: '', hours: '' },
+  // GPay / UPI: shown after the customer sends the order on WhatsApp (checkout.html).
+  // qr: the square QR shown on the page. qrSave: the full QR card customers save to their gallery (falls back to qr).
+  // Both are cut from the shop's GPay QR card and pay futuresportsmmxx@oksbi (FUTURE SPORTS). Change all three together.
+  payment: {
+    qr: 'brand/gpay-qr.png',
+    qrSave: 'brand/gpay-qr-full.jpg',
+    upiId: 'futuresportsmmxx@oksbi',
+    proofNote: 'After paying, please send the payment screenshot on WhatsApp to confirm your order.',
+  },
 };
 
 const SERIES = {
